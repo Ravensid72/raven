@@ -1,0 +1,176 @@
+#include <iostream>
+#include <string>
+#include <vector>
+#include <limits>
+
+#ifdef _WIN32
+    #include <conio.h>
+    int getKey() {
+        int c = _getch();
+        if (c == 0 || c == 0xE0) { _getch(); return -2; }
+        return c;
+    }
+#else
+    #include <termios.h>
+    #include <unistd.h>
+    #include <cstdio>
+    int getKey() {
+        termios oldt{};
+        tcgetattr(STDIN_FILENO, &oldt);
+        termios newt = oldt;
+        newt.c_lflag &= ~(ICANON | ECHO);
+        tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+        int c = getchar();
+        tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+        return c;
+    }
+#endif
+
+using namespace std;
+
+struct User {
+    string username;
+    string password;
+    string position;
+};
+
+vector<User> users;
+
+const string SUPER_USER = "lhonz";
+const string SUPER_PASS = "12345";
+
+const vector<string> POSITIONS = {"Admin", "Teacher", "Student", "Staff"};
+
+string readMaskedPassword() {
+    string password;
+    int ch;
+    while ((ch = getKey()) != '\r' && ch != '\n' && ch != EOF) {
+        if (ch == -2) continue;
+        if (ch == '\b' || ch == 127) {
+            if (!password.empty()) {
+                password.pop_back();
+                cout << "\b \b" << flush;
+            }
+        } else {
+            password += static_cast<char>(ch);
+            cout << '*' << flush;
+        }
+    }
+    cout << endl;
+    return password;
+}
+
+string readLine(const string& prompt) {
+    string s;
+    cout << prompt;
+    getline(cin, s);
+    return s;
+}
+
+int readChoice(const string& prompt, int lo, int hi) {
+    while (true) {
+        string s = readLine(prompt);
+        try {
+            int n = stoi(s);
+            if (n >= lo && n <= hi) return n;
+        } catch (...) {}
+        cout << "Invalid choice. Try again.\n";
+    }
+}
+
+User* findUser(const string& name) {
+    for (auto& u : users)
+        if (u.username == name) return &u;
+    return nullptr;
+}
+
+string choosePosition() {
+    cout << "\nPositions:\n";
+    for (size_t i = 0; i < POSITIONS.size(); ++i)
+        cout << "  " << i + 1 << ". " << POSITIONS[i] << endl;
+    int c = readChoice("Select position: ", 1, (int)POSITIONS.size());
+    return POSITIONS[c - 1];
+}
+
+
+void addUser() {
+    string name = readLine("\nNew username: ");
+    if (name.empty() || name == SUPER_USER || findUser(name)) {
+        cout << "Username is invalid or already taken.\n";
+        return;
+    }
+    cout << "Password: ";
+    string pass = readMaskedPassword();
+    if (pass.empty()) {
+        cout << "Password cannot be empty.\n";
+        return;
+    }
+    string pos = choosePosition();
+    users.push_back({name, pass, pos});
+    cout << "\nUser '" << name << "' created as " << pos << ".\n";
+}
+
+void changePosition() {
+    string name = readLine("\nUsername to update: ");
+    User* u = findUser(name);
+    if (!u) {
+        cout << "User not found.\n";
+        return;
+    }
+    u->position = choosePosition();
+    cout << "\n" << u->username << " is now " << u->position << ".\n";
+}
+
+void listUsers() {
+    cout << "\nUSERS\n";
+    if (users.empty()) cout << "(no users yet)\n";
+    for (auto& u : users)
+        cout << u.username << "  ->  " << u.position << endl;
+}
+
+void superAdminMenu() {
+    while (true) {
+        cout << "\nSUPER ADMIN PANEL\n"
+             << "1. Add user and assign position\n"
+             << "2. Change user position\n"
+             << "3. View all users\n"
+             << "4. Logout\n";
+        int c = readChoice("Choice: ", 1, 4);
+        if (c == 1) addUser();
+        else if (c == 2) changePosition();
+        else if (c == 3) listUsers();
+        else break;
+    }
+}
+
+void login() {
+    string username = readLine("\nUsername: ");
+    cout << "Password: ";
+    string password = readMaskedPassword();
+
+    if (username == SUPER_USER && password == SUPER_PASS) {
+        cout << "\nLogin successful! Welcome, Super Admin.\n";
+        superAdminMenu();
+        return;
+    }
+
+    User* u = findUser(username);
+    if (u && u->password == password) {
+        cout << "\nLogin successful!\n"
+             << "Welcome, " << u->username << "\n"
+             << "Position: " << u->position << endl;
+    } else {
+        cout << "\nInvalid username or password.\n";
+    }
+}
+
+int main() {
+    while (true) {
+        cout << "\nMAIN MENU\n1. Login\n2. Exit\n";
+        int c = readChoice("Choice: ", 1, 2);
+        if (c == 1) login();
+        else break;
+    }
+    cout << "Goodbye!\n";
+    return 0;
+}
